@@ -1,53 +1,69 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import pickle
+import download
+import os
+from keras.utils.np_utils import to_categorical
+
+# This downloads cifar10 dataset if required 
+def get_dataset():
+    url = "https://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz"
+    path = "dataset/CIFAR-10/"
+    download.download(url=url, path=path, kind='tar.gz', progressbar=True, replace=False, verbose=True)
 
 
-def unpickle(file):
-    '''Load byte data from file'''
-    with open(file, 'rb') as f:
-        data = pickle.load(f, encoding='latin-1')
+
+# Load data set from pickel file refrence toronto website
+def unpickle(filename):
+    path = "dataset/CIFAR-10/"
+    file_path = os.path.join(path, "cifar-10-batches-py/", filename)
+
+    print("Loading data: " + file_path)
+
+    with open(file_path, mode='rb') as file:
+
+        data = pickle.load(file, encoding='bytes')
+
     return data
 
+def convert_images(raw):
+    img_size = 32
+    num_channels = 3
+    raw_float = np.array(raw, dtype=float) / 255.0
+    images = raw_float.reshape([-1, num_channels, img_size, img_size])
+    images = images.transpose([0, 2, 3, 1])
+    return images
 
-def load_cifar10_data(data_dir):
-    '''Return train_data, train_labels, test_data, test_labels
-    The shape of data is 32 x 32 x3'''
-    train_data = None
-    train_labels = []
+def load_data(filename):
+    data = unpickle(filename)
+    raw_images = data[b'data']
+    _class = np.array(data[b'labels'])
+    images = convert_images(raw_images)
 
-    for i in range(1, 6):
-        data_dic = unpickle(data_dir + "/data_batch_{}".format(i))
-        if i == 1:
-            train_data = data_dic['data']
-        else:
-            train_data = np.vstack((train_data, data_dic['data']))
-        train_labels += data_dic['labels']
+    return images, _class
 
-    test_data_dic = unpickle(data_dir + "/test_batch")
-    test_data = test_data_dic['data']
-    test_labels = test_data_dic['labels']
+def load_training_data():
+    t_images = 50000
+    img_size = 32
+    num_channels = 3
+    num_classes = 10
+    images = np.zeros(shape=[t_images, img_size, img_size, num_channels], dtype=float)
+    _class = np.zeros(shape=[t_images], dtype=int)
+    begin = 0
 
-    train_data = train_data.reshape((len(train_data), 3, 32, 32))
-    train_data = np.rollaxis(train_data, 1, 4)
-    train_labels = np.array(train_labels)
+    # For each data-file total 5 batches are present.
+    for i in range(5):
+        # Load the images and class-numbers from the data-file.
+        images_batch, cls_batch = load_data(filename="data_batch_" + str(i + 1))
+        num_images = len(images_batch)
+        end = begin + num_images
+        images[begin:end, :] = images_batch
+        _class[begin:end] = cls_batch
+        begin = end
 
-    test_data = test_data.reshape((len(test_data), 3, 32, 32))
-    test_data = np.rollaxis(test_data, 1, 4)
-    test_labels = np.array(test_labels)
+    return images, _class, to_categorical(_class, num_classes=num_classes)
 
-    return train_data, train_labels, test_data, test_labels
-
-data_dir = './dataset/cifar-10-batches-py'
-
-train_data, train_labels, test_data, test_labels = load_cifar10_data(data_dir)
-
-print(train_data.shape)
-print(train_labels.shape)
-
-print(test_data.shape)
-print(test_labels.shape)
-
-# In order to check where the data shows an image correctly
-plt.imshow(train_data[2])
-plt.show()
+def load_test_data():
+    num_classes = 10
+    images, _class = load_data(filename="test_batch")
+    return images, _class, to_categorical(_class, num_classes=num_classes)
